@@ -99,7 +99,7 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
         centroids_complete = __check_convergence(cluster_centers, past_centroids, tol, num_iters)  
 
         # set past centroids to current centroids  
-        past_centroids = cluster_centers
+        past_centroids = cluster_centers.copy()
 
         # increase counter of iterations
         num_iters += 1
