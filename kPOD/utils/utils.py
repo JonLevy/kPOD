@@ -125,8 +125,8 @@ def __check_convergence(cluster_centers, past_centroids, tol, num_iters):
 
     Returns 
     -------
-    centroids_complete: boolean
-        True if the cluster centers have converged, False otherwise.
+    centroids_complete: int
+        Number of cluster centers that have converged within tol
     """
 
     # if it is the first iteration, algorithm has not converged
@@ -188,7 +188,6 @@ def __fill_data(MISSING_DATA, cluster_centers, cluster_assignment):
 
             # if value is empty, replace it with cluster center value
             if (np.isnan(val)):
-
                 # replace value with cluster center value (mean of its dimension)
                 filled_data[i][j] = cluster_centers[obs_cluster][j]
 

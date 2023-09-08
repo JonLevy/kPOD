@@ -105,7 +105,7 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
         num_iters += 1
 
         # if k means is complete, end algo
-        if (centroids_complete):
+        if centroids_complete == n_clusters:
             break
 
     # return assignments and centroids
