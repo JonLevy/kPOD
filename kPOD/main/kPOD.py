@@ -1,6 +1,6 @@
 # imports for mathematical functions
 import numpy as np
-from numpy import nanmean, nan
+from numpy import nanmean, nan, isnan
 import sys
 from scipy.spatial import distance
 import pandas as pd
@@ -53,6 +53,10 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
     past_centroids = []
     cluster_centers = []
     cluster_assignment = []
+    indexes_with_nan = set()
+    for index, line in enumerate(data):
+        if any([isnan(i) for i in line]):
+            indexes_with_nan.add(index)
 
     # loop through max iterations of kPOD
     while num_iters < max_iter:
@@ -65,11 +69,17 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
         # if it has been multiple iterations, fill with algorithm
         if num_iters > 0:
 
+            cluster_assignment, cluster_centers = recluster_if_all_records_have_nan(
+                MISSING_DATA, cluster_centers, cluster_assignment, indexes_with_nan)
+
             # fill data after first iteration
             filled_data = __fill_data(MISSING_DATA, cluster_centers, cluster_assignment)
 
             # save data as np array
             filled_data = np.array(filled_data)
+
+            if len(cluster_centers) != K:  # cluster have been removed, so re-initialize
+                cluster_centers = __initialize(filled_data, K)
 
         # fill with initial imputation if first iteration 
         else:
@@ -95,7 +105,6 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
         STEP 3: Check for convergence
         """
 
-        # check for convergence of algorithm
         centroids_complete = __check_convergence(cluster_centers, past_centroids, tol, num_iters)  
 
         # set past centroids to current centroids  
@@ -113,3 +122,79 @@ def k_pod(data, n_clusters,max_iter=300,tol=0):
     
     cluster_return  = (cluster_assignment, cluster_centers)
     return cluster_return
+
+def recluster_if_all_records_have_nan(
+        data, cluster_centers, cluster_assignment, indexes_with_nan):
+    """
+    Clusters where all the records have a nan are considered invalid.
+    Such clusters are removed, and the records assigned to them are assigned to
+    their nearest cluster center, measured with only the non-nan attributes.
+    """
+
+    def get_distance(point, center):
+        'Simple euclidian distance'
+        dist = 0
+        for index, val in enumerate(point):
+            dist += (val - center[index]) ** 2
+        return dist ** .5
+
+    def find_closest_center_with_nan(point, centers, exclude_clusters):
+        """
+        Find the center closest the point (based on non-nan attributes),
+        and other than excluded_clusters.
+        """
+        new_centers = [list(i) for i in centers]
+
+        remove_attribute_indexes = []
+        for index, val in enumerate(point):
+            if isnan(val):
+                remove_attribute_indexes.append(index)
+        remove_attribute_indexes.sort(reverse=True)
+
+        for val in new_centers:
+            for att in remove_attribute_indexes:
+                del val[att]
+
+        point = [i for i in point if not isnan(i)]
+
+        closest = None
+        min_dist = float('inf')
+        for index, nc in enumerate(new_centers):
+            if index in exclude_clusters:
+                continue
+            if get_distance(point, nc) < min_dist:
+                closest = index
+        return closest
+
+    # figure out if there are clusters to remove `exclude_clusters`
+    cluster_assignment = list(cluster_assignment)
+    cluster_count_excluding_nans = {}
+    for index, val in enumerate(cluster_assignment):
+        if index in indexes_with_nan:
+            continue
+        cluster_count_excluding_nans[val] = cluster_count_excluding_nans.get(
+            val, 0) + 1
+
+    all_clusters = set(cluster_assignment)
+
+    exclude_clusters = all_clusters - set(cluster_count_excluding_nans.keys())
+
+    # reassign excluded_clusters to other clusters
+    for index in indexes_with_nan:
+        closest_cluster = find_closest_center_with_nan(
+            data[index], cluster_centers, exclude_clusters)
+        cluster_assignment[index] = np.float64(closest_cluster)
+
+    # remove the cluster_centers
+    exclude_clusters = list(exclude_clusters)
+    exclude_clusters.sort(reverse=True)
+    cluster_centers = list(cluster_centers)
+    for ex in exclude_clusters:
+        del cluster_centers[int(ex)]
+
+        for index, val in enumerate(cluster_assignment):
+            # decrement cluster values, so there are no gaps
+            if val > ex:
+                cluster_assignment[index] = val - 1
+
+    return np.asarray(cluster_assignment), np.asarray(cluster_centers)
